@@ -1,0 +1,24 @@
+{
+  "name": "getting-started",
+  "version": "0.1.0",
+  "description": "Webpack getting started",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webpack"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/soonespresso/webpack-lagou.git"
+  },
+  "author": "soonespresso",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/soonespresso/webpack-lagou/issues"
+  },
+  "homepage": "https://github.com/soonespresso/webpack-lagou#readme",
+  "devDependencies": {
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
+  }
+}
