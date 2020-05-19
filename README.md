@@ -18,10 +18,10 @@
 
 ```js
 export default () => {
-	const element = document.createElement('h2');
-	element.textContent = 'Hello Webpack';
-	element.addEventListener('click', () => alert('Hello Webpack'));
-	return element;
+  const element = document.createElement('h2');
+  element.textContent = 'Hello Webpack';
+  element.addEventListener('click', () => alert('Hello Webpack'));
+  return element;
 }
 ```
 
@@ -40,13 +40,15 @@ document.body.append(heading);`
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Webpack</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webpack</title>
 </head>
+
 <body>
-	<script src="src/index.js" type="module"></script>
+  <script src="src/index.js" type="module"></script>
 </body>
+
 </html>
 ```
 
@@ -91,13 +93,15 @@ $ npx webpack
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Webpack</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webpack</title>
 </head>
+
 <body>
-	<script src="dist/main.js"></script>
+  <script src="dist/main.js"></script>
 </body>
+
 </html>
 ```
 
@@ -150,7 +154,7 @@ Webpack 4 之后的版本支持零配置方式直接启动打包，整个过程�
 
 ```js
 module.exports = {
-	entry: './src/main.js'
+  entry: './src/main.js'
 }
 ```
 
@@ -166,11 +170,11 @@ module.exports = {
 const path = require('path');
 
 module.exports = {
-	entry: './src/main.js',
-	output: {
-		filename: 'bundle.js',
-		path: path.join(__dirname, 'output')
-	}
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js',
+    path: path.join(__dirname, 'output')
+  }
 }
 ```
 
@@ -191,10 +195,11 @@ import { Configuration } from 'webpack'
  * @type {Configuration}
  */
 const config = {
-	entry: './src/index.js',
-	output: {
-		filename: 'bundle.js'
-	}
+  mode: 'none',
+  entry: './src/index.js',
+  output: {
+    filename: 'bundle.js'
+  },
 }
 
 module.exports = config;
@@ -390,7 +395,7 @@ Webpack 4 新增了一个工作模式的用法，这种用法大大简化了 Web
 
 ```js
 (function(modules) { // webpackBootstrap
-	...
+  ...
 })
 ([
   /* 0 */
