@@ -456,7 +456,8 @@ Symbol.toStringTag
 - [MDN web docs | Symbol.toStringTag](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toStringTag)
 - [Symbol.toStringTag 属性](https://www.softwhy.com/article-7583-1.html)
 
-.gitignore
+git
 
 - [Git中.gitignore的配置语法](https://www.jianshu.com/p/ea6341224e89)
+- [向github提交代码总是要输入用户名密码](https://blog.csdn.net/weixin_34162401/article/details/94478320)
 
