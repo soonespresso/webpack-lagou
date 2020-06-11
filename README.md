@@ -1,468 +1,600 @@
-# 如何使用 Webpack 实现模块化打包？
+# 利用插件机制横向扩展 Webpack 的构建能力
 
-## javascript module
+> Webpack 插件机制的目的是为了增强 Webpack 在项目自动化构建方面的能力。
 
-*index.html*
+Loader 就是负责完成项目中各种各样资源模块的加载，从而实现整体项目的模块化，而 Plugin 则是用来解决项目中除了资源模块打包以外的其他自动化工作，所以说 Plugin 的能力范围更广，用途自然也就更多。
 
-```html
-<script src="src/index.js" type="module"></script>
-```
+插件最常见的应用场景：
 
-> `type="module"` 用法是 ES Modules 中提出的标准，用来区分加载一个普通 JS 脚本还是一个模块。
+- 实现自动在打包之前清除 dist 目录（上次的打包结果）；
+- 自动生成应用所需要的 HTML 文件；
+- 根据不同环境为代码注入类似 API 地址这种可能变化的部分；
+- 拷贝不需要参与打包的资源文件到输出目录；
+- 压缩 Webpack 打包完成后输出的文件；
+- 自动发布打包结果到服务器实现自动部署。
 
-有了 JS module，可以使用 `export` 关键字去导出任何东西，可以使用 `import` 从任何其他模块导入模块。
+总之，有了 Plugin 的 Webpack 几乎“无所不能”。借助插件，我们就可以轻松实现前端工程化中绝大多数经常用到的功能，这也正是很多初学者会认为 “Webpack 就是前端工程化，或者前端工程化就是 Webpack” 的原因。
 
- ![jsmodule-directory](assets/jsmodule-directory.png)
+## 体验插件机制：clean-webpack-plugin
 
-*src\heading.js*
+首先第一个就是用来自动清除输出目录的插件。
 
-```js
-export default () => {
-  const element = document.createElement('h2');
-  element.textContent = 'Hello Webpack';
-  element.addEventListener('click', () => alert('Hello Webpack'));
-  return element;
-}
-```
+Webpack 每次打包的结果都是直接覆盖到 dist 目录。而在打包之前，dist 目录中就可能已经存入了一些在上一次打包操作时遗留的文件，当我们再次打包时，只能覆盖掉同名文件，而那些已经移除的资源文件就会一直累积在里面，最终导致部署上线时出现多余文件，这显然非常不合理。
 
-*src\index.js*
+更为合理的做法就是在每次完整打包之前，自动清理 dist 目录，这样每次打包过后，dist 目录中就只会存在那些必要的文件。
 
-```js
-import createHeading from './heading.js'
-
-const heading = createHeading();
-document.body.append(heading);`
-```
-
-*index.html*
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Webpack</title>
-</head>
-
-<body>
-  <script src="src/index.js" type="module"></script>
-</body>
-
-</html>
-```
-
- ![jsmodule](assets/jsmodule.gif)
-
-## 使用 webpack 打包
-
-Webpack 是一个 npm 工具模块，所以我们先初始化一个 package.json 文件，用来管理 npm 依赖版本，完成之后，再来安装 Webpack 的核心模块以及它的 CLI 模块，具体操作如下：
+clean-webpack-plugin 这个插件就很好的实现了这一需求。它是一个第三方的 npm 包，我们需要先通过 npm 安装一下，具体操作如下：
 
 ```sh
-$ npm init --yes
-$ npm i webpack webpack-cli --save-dev
+npm install clean-webpack-plugin --save-dev
 ```
 
-- webpack 是 Webpack 的核心模块
-- webpack-cli 是 Webpack 的 CLI 程序，用来在命令行中调用 Webpack
-
-安装完成之后，webpack-cli 所提供的 CLI 程序就会出现在 node_modules/.bin 目录当中，我们可以通过 npx 快速找到 CLI 并运行它，具体操作如下：
-
-```sh
-$ npx webpack --version
-4.43.0
-```
-
-> npx 是 npm 5.2 以后新增的一个命令，可以用来更方便的执行远程模块或者项目 node_modules 中的 CLI 程序。
-
-有了 Webpack 后，就可以直接运行 webpack 命令来打包 JS 模块代码，具体操作如下：
-
-```sh
-$ npx webpack
-```
-
-命令在执行的过程中，Webpack 会自动从 src/index.js 文件开始打包，然后根据代码中的模块导入操作，自动将所有用到的模块代码打包到一起。
-
-完成之后，控制台会提示：顺着 index.js 有两个 JS 文件被打包到了一起。与之对应的就是项目的根目录下多出了一个 *dist* 目录，我们的打包结果就存放在这个目录下的 *main.js* 文件中，具体操作如下图所示：
-
- ![npx_webpack](assets/npx_webpack.png)
-
-重新修改 *index.html* 文件引入路径，打包后代码不再有 `import` 和 `export`，可以删除 `type="module"`。刷新浏览器，页面正常工作：
-
-```html
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Webpack</title>
-</head>
-
-<body>
-  <script src="dist/main.js"></script>
-</body>
-
-</html>
-```
-
-将 Webpack 指令定义到 npm scripts 中，使用起来更加方便：
-
-```json
-{
-  "name": "getting-started",
-  "version": "0.1.0",
-  "description": "Webpack getting started",
-  "main": "index.js",
-  "scripts": {
-    "build": "webpack"
-  },
-  "author": "soonespresso",
-  "license": "MIT",
-  "devDependencies": {
-    "webpack": "^4.43.0",
-    "webpack-cli": "^3.3.11"
-  }
-}
-
-```
-
-Webpack 使用的总结：先安装 webpack 相关的 npm 包，然后使用 webpack-cli 所提供的命令行工具进行打包。
-
-## 配置 Webpack 打包过程
-
-Webpack 4 之后的版本支持零配置方式直接启动打包，整个过程约定：将 *src\index.js* 作为打包入口，最终打包结构存放到 *dist\main.js* 中。
-
-但更多时候我们需要自定义这些路径约定，例如：我们需要它的打包入口是 *src/main.js*，那此时我们通过配置文件的方式修改 Webpack 的默认配置，在项目的根目录下添加一个 *webpack.config.js*，具体结构如下：
-
-```
-> webpack-lagou
-  ├ src
-  │  ├ heading.js
-  │  └ main.js
-  ├ index.html
-  ├ package.json
-+ └ webpack.config.js .................... Webpack 配置文件
-```
-
-- webpack.config.js：是一个运行在 Node.js 环境中的 JS 文件，也就是说我们需要按照 CommonJS 的方式编写代码，这个文件可以导出一个对象，我们可以通过所导出对象的属性完成相应的配置选项。
-
-### entry 
-
-添加一个 entry 属性，指定 Webpack 打包的入口文件路径。
+安装过后，我们回到 Webpack 的配置文件中，然后导入 clean-webpack-plugin 插件，这个插件模块导出了一个叫作 CleanWebpackPlugin 的成员，我们先把它解构出来，具体代码如下：
 
 *webpack.config.js*
 
 ```js
-module.exports = {
-  entry: './src/main.js'
-}
-```
-
-### output 
-
-官方文档：https://webpack.js.org/configuration/#options
-
-通过 output 属性设置输出文件的位置。
-
-- output 属性的值必须是一个对象，通过这个对象的 filename 指定输出文件的文件名称，path 指定输出的目录。
-
-```js
-const path = require('path');
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
 
 module.exports = {
-  entry: './src/main.js',
-  output: {
-    filename: 'bundle.js',
-    path: path.join(__dirname, 'output')
-  }
-}
-```
-
-> *webpack.config.js* 是运行在 Node.js 环境中的代码，所以直接可以使用 path 之类的 Node.js 内置模块。
-
-## 让配置文件支持智能提示
-
- VSCode 对于代码的自动提示是根据成员的类型推断出来的，换句话说，如果 VSCode 知道当前变量的类型，就可以给出正确的智能提示。即便你没有使用 TypeScript 这种类型友好的语言，也可以通过类型注释的方式去标注变量的类型。
-
-默认 VSCode 并不知道 Webpack 配置对象的类型，我们通过 import 的方式导入 Webpack 模块中的 Configuration 类型，然后根据类型注释的方式将变量标注为这个类型，这样我们在编写这个对象的内部结构时就可以有正确的智能提示了，具体代码如下所示：
-
-*webpack.config.js*
-
-```js
-import { Configuration } from 'webpack'
-
-/**
- * @type {Configuration}
- */
-const config = {
   mode: 'none',
-  entry: './src/index.js',
+  entry: './src/main.js',
   output: {
     filename: 'bundle.js'
   },
+  plugins: [
+    new CleanWebpackPlugin()
+  ]
 }
 
-module.exports = config;
 ```
 
-> 打包时需要注释掉：`import { Configuration } from 'webpack'`，否则会报错。
+测试一下 clean-webpack-plugin 插件的效果。
 
-## Webpack 工作模式
+## 用于生成 HTML 的插件：html-webpack-plugin
 
-官方文档：https://webpack.js.org/configuration/mode/
+除了自动清理 dist 目录，我们还有一个非常常见的需求，就是自动生成使用打包结果的 HTML，所谓使用打包结果指的是在 HTML 中自动注入 Webpack 打包生成的 bundle。
 
-Webpack 4 新增了一个工作模式的用法，这种用法大大简化了 Webpack 配置的复杂程度。你可以把它理解为针对不同环境的几组预设配置：
+在使用接下来这个插件之前，我们的 HTML 文件一般都是通过硬编码的方式，单独存放在项目根目录下的，这种方式有两个问题：
 
-- **production** 模式下，启动内置优化插件，自动优化打包结果，打包速度偏慢；
-- **development** 模式下，自动优化打包速度，添加一些调试过程中的辅助插件；
-- **none** 模式下，运行最原始的打包，不做任何额外处理。
+- 项目发布时，我们需要同时发布根目录下的 HTML 文件和 dist 目录中所有的打包结果，非常麻烦，而且上线过后还要确保 HTML 代码中的资源文件路径是正确的。
+- 如果打包结果输出的目录或者文件名称发生变化，那 HTML 代码中所对应的 script 标签也需要我们手动修改路径。
 
-> 如果你没有配置工作模式，打包过程中命令行终端会打印一个对应的配置警告。
-> 在这种情况下 Webpack 将**默认使用 production 模式**去工作。
->
-> production 模式下 Webpack 内部会自动启动一些优化插件，
-> 例如，自动压缩打包后的代码。这对实际生产环境是非常友好的，但是打包的结果就无法阅读了。
+解决这两个问题最好的办法就是让 Webpack 在打包的同时，自动生成对应的 HTML 文件，让 HTML 文件也参与到整个项目的构建过程。这样的话，在构建过程中，Webpack 就可以自动将打包的 bundle 文件引入到页面中。
 
-修改 Webpack 工作模式的方式有两种：
+相比于之前写死 HTML 文件的方式，自动生成 HTML 的优势在于：
 
-- 通过 CLI --mode 参数传入；
-- 通过配置文件设置 mode 属性。
+- HTML 也输出到 dist 目录中了，上线时我们只需要把 dist 目录发布出去就可以了；
+- HTML 中的 script 标签是自动引入的，所以可以确保资源文件的路径是正常的。
 
-## 打包结果运行原理
+具体的实现方式就需要借助于 html-webpack-plugin 插件来实现，这个插件也是一个第三方的 npm 模块，我们这里同样需要单独安装这个模块，具体操作如下：
 
-先将 Webpack 工作模式设置为 none，按照最原始的状态进行打包。
+```sh
+npm install html-webpack-plugin --save-dev
+```
 
-按照 none 模式打包完成后，我们打开最终生成的 bundle.js 文件，如下图所示：
+回到配置文件，载入这个模块，不同于 clean-webpack-plugin，html-webpack-plugin 插件默认导出的就是插件类型，不需要再解构内部成员，具体如下：
 
-*dist\bundle.js*
+*webpack.config.js*
 
 ```js
-(function (modules) { // webpackBootstrap
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
 
-  // 缓存加载过的模块
-  // The module cache
-  var installedModules = {};
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    new CleanWebpackPlugin(),
+    new HtmlWebpackPlugin()
+  ]
+}
 
-  // 加载指定模块
-  // The require function
-  function __webpack_require__(moduleId) {
-    debugger;
+```
 
-    // Check if module is in cache
-    if (installedModules[moduleId]) {
-      return installedModules[moduleId].exports;
-    }
+再次运行打包命令，此时打包过程中就会自动生成一个 index.html 文件到 dist 目录：
 
-    // Create a new module (and put it into the cache)
-    var module = installedModules[moduleId] = {
-      i: moduleId,
-      l: false,
-      exports: {}
-    };
+*dist\index.html*
 
-    // Execute the module function
-    modules[moduleId].call(module.exports, module, module.exports, __webpack_require__);
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Webpack App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body>
+  <script src="bundle.js"></script></body>
+</html>
+```
 
-    // Flag the module as loaded
-    module.l = true;
+至此，Webpack 就可以动态生成应用所需的 HTML 文件了，但是这里仍然存在一些需要改进的地方：
 
-    // Return the exports of the module
-    return module.exports;
-  }
+- 对于生成的 HTML 文件，页面 title 必须要修改；
+- 很多时候还需要我们自定义页面的一些 meta 标签和一些基础的 DOM 结构。
 
-  // expose the modules object (__webpack_modules__)
-  __webpack_require__.m = modules;
+也就是说，还需要我们能够充分自定义这个插件最终输出的 HTML 文件。
 
-  // expose the module cache
-  __webpack_require__.c = installedModules;
+> 如果只是简单的自定义，我们可以通过修改 HtmlWebpackPlugin 的参数来实现。
 
-  // define getter function for harmony exports
-  __webpack_require__.d = function (exports, name, getter) {
+回到 Webpack 的配置文件中，这里我们给 HtmlWebpackPlugin 构造函数传入一个对象参数，用于指定配置选项：
 
-    if (!__webpack_require__.o(exports, name)) {
+*webpack.config.js*
 
-      Object.defineProperty(exports, name, {
-        enumerable: true,
-        get: getter
-      });
-    }
-  };
+```js
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
 
-  // define __esModule on exports
-  __webpack_require__.r = function (exports) {
-
-    if (typeof Symbol !== 'undefined' && Symbol.toStringTag) {
-
-      Object.defineProperty(exports, Symbol.toStringTag, {
-        value: 'Module'
-      });
-    }
-
-    Object.defineProperty(exports, '__esModule', {
-      value: true
-    });
-  };
-
-  // 创建伪命名空间对象
-  // create a fake namespace object
-  // mode & 1: value is a module id, require it
-  // mode & 2: merge all properties of value into the ns
-  // mode & 4: return value when already ns object
-  // mode & 8|1: behave like require
-  __webpack_require__.t = function (value, mode) {
-
-    if (mode & 1) value = __webpack_require__(value);
-
-    if (mode & 8) return value;
-
-    if ((mode & 4) && typeof value === 'object' && value && value.__esModule) return value;
-
-    var ns = Object.create(null);
-
-    __webpack_require__.r(ns);
-
-    Object.defineProperty(ns, 'default', {
-      enumerable: true,
-      value: value
-    });
-
-    if (mode & 2 && typeof value != 'string') for (var key in value) __webpack_require__.d(ns, key,
-      function (key) {
-        return value[key];
-      }.bind(null, key));
-
-    return ns;
-  };
-
-  // getDefaultExport function for compatibility with non-harmony modules
-  __webpack_require__.n = function (module) {
-
-    var getter = module && module.__esModule ?
-
-      function getDefault() {
-        return module['default'];
-      } :
-
-      function getModuleExports() {
-        return module;
-      };
-
-    __webpack_require__.d(getter, 'a', getter);
-
-    return getter;
-  };
-
-  // Object.prototype.hasOwnProperty.call
-  __webpack_require__.o = function (object, property) {
-    return Object.prototype.hasOwnProperty.call(object, property);
-  };
-
-  // __webpack_public_path__
-  __webpack_require__.p = "";
-
-  // 开始加载源代码中的入口模块
-  // Load entry module and return exports
-  return __webpack_require__(__webpack_require__.s = 0);
-})
-  ([
-    /* 0 */
-    (function (module, __webpack_exports__, __webpack_require__) {
-
-      "use strict";
-      __webpack_require__.r(__webpack_exports__);
-      /* harmony import */
-      var _heading_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1);
-
-      const heading = Object(_heading_js__WEBPACK_IMPORTED_MODULE_0__["default"])();
-      document.body.append(heading);
-    }),
-
-    /* 1 */
-    (function (module, __webpack_exports__, __webpack_require__) {
-
-      "use strict";
-      __webpack_require__.r(__webpack_exports__);
-      /* harmony default export */
-      __webpack_exports__["default"] = (() => {
-        const element = document.createElement('h2');
-        element.textContent = 'Hello Webpack';
-        element.addEventListener('click', () => alert('Hello Webpack'));
-        return element;
-      });
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    new CleanWebpackPlugin(),
+    new HtmlWebpackPlugin({
+      // 设置 HTML 的标题
+      title: 'Webpack Plugin Sample',
+      // 尝试为页面添加一个 viewport 设置
+      meta: {
+        viewport: 'width=device-width'
+      }
     })
-  ]);
+  ]
+}
+
 ```
 
-整体生成的代码其实就是一个立即执行函数，这个函数是 Webpack 工作入口（webpackBootstrap），它接收一个 modules 参数，调用时传入了一个数组。
+完成以后回到命令行终端，再次打包：
+
+*dist\index.html*
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Webpack Plugin Sample</title>
+  <meta name="viewport" content="width=device-width"></head>
+  <body>
+  <script src="bundle.js"></script></body>
+</html>
+```
+
+如果需要对 HTML 进行大量的自定义，更好的做法是在源代码中添加一个用于生成 HTML 的模板，然后让 html-webpack-plugin 插件根据这个模板去生成页面文件。
+
+这里在 src 目录下新建一个 index.html 文件作为 HTML 文件的模板，然后根据我们的需要在这个文件中添加相应的元素。
+
+> 对于模板中动态的内容，可以使用 Lodash 模板语法输出，模板中可以通过 htmlWebpackPlugin.options 访问这个插件的配置数据，
+
+具体代码如下：
+
+*src\index.html*
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= htmlWebpackPlugin.options.title %></title>
+</head>
+<body>
+  <div class="container">
+    <h1>Container</h1>
+    <div id="root"></div>
+  </div>
+</body>
+</html>
+```
+
+*webpack.config.js*
 
 ```js
-(function(modules) { // webpackBootstrap
-  ...
-})
-([
-  /* 0 */
-  (function(module, __webpack_exports__, __webpack_require__) {...}),
-  /* 1 */
-  (function(module, __webpack_exports__, __webpack_require__) {...})
-]);
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
+
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    new CleanWebpackPlugin(),
+    new HtmlWebpackPlugin({
+      title: 'Webpack Plugin Sample',
+      template: './src/index.html'
+    })
+  ]
+}
+
 ```
 
-这个数组，里面的元素均是参数列表相同的函数。这里的函数对应的就是我们源代码中的模块，也就是说每个模块最终被包裹到了这样一个函数中，从而实现模块私有作用域，
+完成以后我们回到命令行终端，运行打包命令，然后再来看一下生成的 HTML 文件：
+
+*dist\index.html*
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Webpack Plugin Sample</title>
+</head>
+<body>
+  <div class="container">
+    <h1>Container</h1>
+    <div id="root"></div>
+  </div>
+<script src="bundle.js"></script></body>
+</html>
+```
+
+关于 html-webpack-plugin 插件，除了自定义输出文件的内容，同时输出多个 HTML 文件也是一个非常常见的需求，除非我们的应用是一个单页应用程序，否则一定需要输出多个 HTML 文件。
+
+如果需要同时输出多个 HTML 文件，其实也非常简单，回到配置文件中，这里通过 HtmlWebpackPlugin 创建的对象就是用于生成 index.html 的，那我们完全可以再创建一个新的实例对象，用于创建额外的 HTML 文件。
+
+例如，这里我们再来添加一个 HtmlWebpackPlugin 实例用于创建一个 about.html 的页面文件，我们需要通过 filename 指定输出文件名，这个属性的默认值是 index.html，我们把它设置为 about.html，具体配置如下：
+
+*webpack.config.js*
+
+> 单入口打包
 
 ```js
-[
-  /* 0 */
-  (function(module, __webpack_exports__, __webpack_require__) {
-  
-    "use strict";
-    __webpack_require__.r(__webpack_exports__);
-    /* harmony import */
-    var _heading_js__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(1);
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
 
-    // src\index.js
-    const heading = Object(_heading_js__WEBPACK_IMPORTED_MODULE_0__["default"])();
-    document.body.append(heading);
-  }),
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    new CleanWebpackPlugin(),
+    new HtmlWebpackPlugin({
+      // 设置 HTML 的标题
+      title: 'Webpack Plugin Sample',
+      template: './src/index.html'
+    }),
+    new HtmlWebpackPlugin({
+      // 默认：index.html
+      filename: 'about.html'
+    })
+  ]
+}
 
-  /* 1 */
-  (function(module, __webpack_exports__, __webpack_require__) {
-  
-    "use strict";
-    __webpack_require__.r(__webpack_exports__);
-    /* harmony default export */
-    __webpack_exports__["default"] = (() =>{
-      
-      // src\heading.js
-      const element = document.createElement('h2');
-      element.textContent = 'Hello Webpack';
-      element.addEventListener('click', () =>alert('Hello Webpack'));
-      return element;
-    });
-  })
-]
 ```
 
-## 总结
+完成以后我们再次回到命令行终端，运行打包命令，然后我们展开 dist 目录生成了 index.html 和 about.html 两个页面文件：
 
-1. Webpack 是如何满足模块化打包需求的。
-2. Webpack 打包的配置方式以及一个可以实现配置文件智能提示的小技巧。
-3. Webpack 工作模式特性的作用。
-4. 通过 Webpack 打包后的结果是如何运行起来的？
+ ![mult-html](assets/mult-html.png)
 
-# 参考资料
+## 用于复制文件的插件：copy-webpack-plugin
 
-Javascript module
+在我们的项目中一般还有一些不需要参与构建的静态文件，那它们最终也需要发布到线上，例如网站的 favicon、robots.txt 等。
 
-- [在浏览器中使用javascript module（译）](https://www.jianshu.com/p/f7db50cf956f)
-- [阮一峰的ES6---Module的加载实现](https://www.imooc.com/article/20630?block_id=tuijian_wz)
+> 一般我们建议，把这类文件统一放在项目根目录下的 public 或者 static 目录中，我们希望 Webpack 在打包时一并将这个目录下所有的文件复制到输出目录。
 
-Symbol.toStringTag
+对于这种需求，我们可以使用 copy-webpack-plugin 插件来帮我们实现。
 
-- [MDN web docs | Symbol.toStringTag](https://developer.mozilla.org/zh-CN/docs/Web/JavaScript/Reference/Global_Objects/Symbol/toStringTag)
-- [Symbol.toStringTag 属性](https://www.softwhy.com/article-7583-1.html)
+先安装一下插件：
 
-git
+```sh
+npm install copy-webpack-plugin --save-dev
+```
 
-- [Git中.gitignore的配置语法](https://www.jianshu.com/p/ea6341224e89)
-- [向github提交代码总是要输入用户名密码](https://blog.csdn.net/weixin_34162401/article/details/94478320)
+安装完成过后，回到配置文件中，导入这个插件类型。然后同样在 plugins 属性中添加一个这个类型的实例，具体代码如下：
 
+*webpack.config.js*
+
+```js
+const { CleanWebpackPlugin } = require('clean-webpack-plugin')
+const HtmlWebpackPlugin = require('html-webpack-plugin')
+const CopyWebpackPlugin = require('copy-webpack-plugin')
+
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    new CleanWebpackPlugin(),
+    new HtmlWebpackPlugin({
+      // 设置 HTML 的标题
+      title: 'Webpack Plugin Sample',
+      template: './src/index.html'
+    }),
+    new HtmlWebpackPlugin({
+      filename: 'about.html'
+    }),
+    new CopyWebpackPlugin({
+      patterns: ['public'] // 需要拷贝的目录或者路径通配符
+    })
+  ]
+}
+
+```
+
+这个插件类型的构造函数需要我们传入一个字符串数组，用于指定需要拷贝的文件路径。它可以是一个通配符，也可以是一个目录或者文件的相对路径。我们这里传入的是 public 目录，表示将这个目录下所有文件全部拷贝到输出目录中。当然了，你还可以在这个数组中继续添加其它路径，这样它在工作时可以同时拷贝。
+
+配置完成以后回到命令行终端，再次运行 Webpack，此时 public 目录下的文件就会同时拷贝到输出目录中。
+
+ ![copy-file](assets/copy-file.png)
+
+## 开发一个插件
+
+我们知道相比于 Loader，插件的能力范围更宽，因为 Loader 只是在模块的加载环节工作，而插件的作用范围几乎可以触及 Webpack 工作的每一个环节。
+
+那么，这种插件机制是如何实现的呢？
+
+其实说起来也非常简单，**Webpack 的插件机制就是我们在软件开发中最常见的钩子机制**。
+
+钩子机制也特别容易理解，它有点类似于 Web 中的事件。在 Webpack 整个工作过程会有很多环节，为了便于插件的扩展，Webpack 几乎在每一个环节都埋下了一个钩子。这样我们在开发插件的时候，通过往这些不同节点上挂载不同的任务，就可以轻松扩展 Webpack 的能力。
+
+![hook_function](assets/hook_function.gif)
+
+具体有哪些预先定义好的钩子，我们可以参考官方文档的 API：
+
+- [Compiler Hooks](https://webpack.js.org/api/compiler-hooks/)
+- [Compilation Hooks](https://webpack.js.org/api/compilation-hooks/)
+- [JavascriptParser Hooks](https://webpack.js.org/api/parser/)
+
+接下来，开发一个自己的插件，看看具体如何往这些钩子上挂载任务。
+
+>这里我的需求是，希望我们开发的这个插件能够自动清除 Webpack 打包结果中的注释，这样一来，我们的 bundle.js 将更容易阅读，如下图所示：
+
+![bundle-annotation](assets/bundle-comments.png)
+
+那这里我们同样在项目根目录下添加一个单独的 JS 文件。
+
+```
+> webpack-lagou
+  │
+  ├ public . . . . . . . . . . . . . . . static dir
+  │ │
+  │ └ favicon.ico . . . . . . . . . . . static file
+  │
+  ├ src . . . . . . . . . . . . . . . . . source dir
+  │ │
+  │ └ main.js . . . . . . . . . . . . . entry module
+  │
+  ├ package.json . . . . . . . . . . . . package file
+  │
++ ├ remove-comments-plugin.js . . . . . . my plugin
+  │
+  └ webpack.config.js . . . . . . . . . . my plugin
+```
+
+> Webpack 要求我们的插件必须是一个函数或者是一个包含 apply 方法的对象，一般我们都会定义一个类型，在这个类型中定义 apply 方法。然后在使用时，再通过这个类型来创建一个实例对象去使用这个插件。
+
+我们这里定义一个 RemoveCommentsPlugin 类型，然后在这个类型中定义一个 apply 方法，这个方法会在 Webpack 启动时被调用，它接收一个 compiler 对象参数，这个对象是 Webpack 工作过程中最核心的对象，里面包含了我们此次构建的所有配置信息，我们就是通过这个对象去注册钩子函数，具体代码如下：
+
+*remove-comments-plugin.js*
+
+```js
+class RemoveCommentsPlugin {
+
+  apply(compiler) {
+    // compiler 包含此次构建的所有配置信息
+    console.log('RemoveCommentsPlugin start.');
+  }
+}
+```
+
+知道这些过后，还需要明确我们这个任务的执行时机，也就是到底应该把这个任务挂载到哪个钩子上。
+
+>### emit
+>
+>> AsyncSeriesHook
+>
+>Executed right before emitting assets to output dir.
+>
+>- Callback Parameters: `compilation`
+
+那根据 API 文档中的介绍，我们找到一个叫作 emit 的钩子，**这个钩子会在 Webpack 即将向输出目录输出文件时执行**，非常符合我们的需求。
+
+回到代码中：*remove-comments-plugin.js*
+
+```js
+module.exports = class RemoveCommentsPlugin {
+
+  apply(compiler) {
+    // compiler 包含此次构建的所有配置信息
+    console.log('RemoveCommentsPlugin start.');
+    
+    // 注册钩子函数
+    compiler.hooks.emit.tap(
+      'RemoveCommentsPlugin',
+      // compilation：此次打包的上下文
+      compilation => {
+        for (const name in compilation.assets) {
+          // 输出文件名称
+          console.log(name);
+        }
+      }
+    )
+  }
+}
+```
+
+通过 compiler 对象的 hooks 属性访问到 emit 钩子，再通过 tap 方法注册一个钩子函数，这个方法接收两个参数：
+
+- 第一个是插件的名称，我们这里的插件名称是 RemoveCommentsPlugin；
+- 第二个是要挂载到这个钩子上的函数；
+
+根据 API 文档中的提示，这里我们在这个函数中接收一个 compilation 对象参数，这个对象可以理解为此次运行打包的上下文，所有打包过程中产生的结果，都会放到这个对象中。
+
+我们可以使用这个对象中的 assets 属性获取即将写入输出目录的资源文件信息，它是一个对象，我们这里通过 for in 去遍历这个对象，其中键就是每个文件的名称，我们尝试把它打印出来。
+
+将自定义插件应用到 Webpack 的配置中：*webpack.config.js*
+
+```js
+...
+const RemoveCommentsPlugin = require('./remove-comments-plugin')
+
+module.exports = {
+  mode: 'none',
+  entry: './src/main.js',
+  output: {
+    filename: 'bundle.js'
+  },
+  plugins: [
+    ...,
+    new RemoveCommentsPlugin()
+  ]
+}
+
+```
+
+然后回到命令行重新打包，此时打包过程就会打印我们输出的文件名称：
+
+ ![webpack-my-plugin](assets/webpack-my-plugin.png)
+
+再回到代码中，来打印一下每个资源文件的内容，文件内容需要通过遍历的值对象中的 source 方法获取，具体代码如下：
+
+*remove-comments-plugin.js*
+
+```js
+module.exports = class RemoveCommentsPlugin {
+
+  apply(compiler) {
+    // compiler 包含此次构建的所有配置信息
+    console.log('RemoveCommentsPlugin start.');
+    
+    // 注册钩子函数
+    compiler.hooks.emit.tap(
+      'RemoveCommentsPlugin',
+      // compilation：此次打包的上下文
+      compilation => {
+        for (const name in compilation.assets) {
+          // 输出文件名称
+          // console.log(name);
+          // 资源文件内容
+          console.log(compilation.assets[name].source());
+        }
+      }
+    )
+  }
+}
+```
+
+回到命令行，再次打包，此时输出的文件内容也可以正常被打印。
+
+```
+<Buffer 00 00 01 00 06 00 00 00 00 00 01 00 20 00 e4 2f 00 00 66 00 00 00 40 40 00 00 01 00 20 00 28 42 00 00 4a 30 00 00 30 30 00 00 01 00 20 00 
+a8 25 00 00 ... 46720 more bytes>
+/******/ (function(modules) { // webpackBootstrap
+/******/        // The module cache
+/******/        var installedModules = {};
+/******/
+/******/        // The require function
+/******/        function __webpack_require__(moduleId) {
+/******/
+/******/                // Check if module is in cache
+/******/                if(installedModules[moduleId]) {
+/******/                        return installedModules[moduleId].exports;
+/******/                }
+/******/                // Create a new module (and put it into the cache)
+/******/                var module = installedModules[moduleId] = {       
+/******/                        i: moduleId,
+/******/                        l: false,
+/******/                        exports: {}
+/******/                };
+/******/
+/******/                // Execute the module function
+.
+.
+.
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Webpack App</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"></head>
+  <body>
+  <script src="bundle.js"></script></body>
+</html>
+Hash: d059f138b341b191c0f3
+Version: webpack 4.43.0
+Time: 184ms
+Built at: 2020-06-11 16:34:17
+      Asset       Size  Chunks             Chunk Names
+ about.html  227 bytes          [emitted]
+  bundle.js   3.57 KiB       0  [emitted]  main
+favicon.ico   45.7 KiB          [emitted]
+ index.html  337 bytes          [emitted]
+Entrypoint main = bundle.js
+[0] ./src/main.js 0 bytes {0} [built]
+Child HtmlWebpackCompiler:
+          Asset      Size  Chunks             Chunk Names
+    favicon.ico  45.7 KiB          [emitted]
+     + 2 hidden assets
+    Entrypoint HtmlWebpackPlugin_0 = __child-HtmlWebpackPlugin_0
+    Entrypoint HtmlWebpackPlugin_1 = __child-HtmlWebpackPlugin_1
+    [0] ./node_modules/html-webpack-plugin/lib/loader.js!./src/index.html 650 bytes {0} [built]
+        + 1 hidden module
+```
+
+能够拿到文件名和文件内容后，我们回到代码中。这里需要先判断文件名是不是以 .js 结尾，因为 Webpack 打包还有可能输出别的文件，而我们的需求只需要处理 JS 文件。
+
+那如果是 JS 文件，我们将文件内容得到，再通过正则替换的方式移除掉代码中的注释，最后覆盖掉 compilation.assets 中对应的对象，在覆盖的对象中，我们同样暴露一个 source 方法用来返回新的内容。另外还需要再暴露一个 size 方法，用来返回内容大小，这是 Webpack 内部要求的格式，具体代码如下：
+
+*remove-comments-plugin.js*
+
+```js
+module.exports = class RemoveCommentsPlugin {
+
+  apply(compiler) {
+    // compiler 包含此次构建的所有配置信息
+    console.log('RemoveCommentsPlugin start.');
+    
+    // 注册钩子函数
+    compiler.hooks.emit.tap(
+      'RemoveCommentsPlugin',
+      // compilation：此次打包的上下文
+      compilation => {
+        for (const name in compilation.assets) {
+          // 输出文件名称
+          // console.log(name);
+          // 资源文件内容
+          // console.log(compilation.assets[name].source());
+          if (name.endsWith('.js')) {
+            const contents = compilation.assets[name].source();
+            const noComments = contents.replace(/\/\*{2,}\/\s?/g, '');
+            compilation.assets[name] = {
+              source: () => noComments,
+              size: () => noComments.length
+            }
+          }
+        }
+      }
+    )
+  }
+}
+```
+
+完成以后回到命令行终端，再次打包，打包完成过后，我们再来看一下 bundle.js，此时 bundle.js 中每行开头的注释就都被移除了。
+
+ ![bundle-no-comments](assets/bundle-no-comments.png)
+
+以上就是我们实现一个移除注释插件的过程，通过这个过程我们了解了：插件都是通过往 Webpack 生命周期的钩子中挂载任务函数实现的。
+
+# 写在最后
+
+最后我们再来总结一下今天的内容：
+
+首先，我们简单了解了几个非常常用的插件，这些插件一般都适用于任何类型的项目。不管你有没有使用框架，或者使用的是哪一个框架，它们基本上都会用到，所以说，在这之后你最好能够仔细过一遍这些插件的官方说明，看看它们还可以有哪些特别的用法，做到心中有数。
+
+除此之外，社区中还提供了成百上千的插件，你并不需要也不可能全部认识。当你遇到一些具体的构建需求时，再去提炼你需求中的关键词然后搜索它们，例如，我想要压缩输出的图片，我会搜索 imagemin webpack plugin。虽然说每个插件的作用不尽相同，但是在用法上基本都是类似的。
+
+其次，我们通过一个简单插件的开发过程，了解了插件机制的工作原理，总结下来就是一句话：**Webpack 为每一个工作环节都预留了合适的钩子，我们在扩展时只需要找到合适的时机去做合适的事情就可以了**。
+
+这种钩子机制又叫作面向切面编程（AOP），是软件工程中实现插件机制最常见的方式，如果你在以后的开发工作中有类似的需求，那钩子机制一定是最好的选择。而且对于使用 JavaScript 的开发者而言，实现面向切面编程其实也很容易，很多时候我们都会采用事件机制去实现这种编程模式。
